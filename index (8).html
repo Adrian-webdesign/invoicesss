@@ -1,0 +1,1805 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Faturar — Gerador de Invoices</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; min-height: 100vh; }
+  .serif { font-family: 'DM Serif Display', serif; }
+
+  :root {
+    --ink: #1a1a1a;
+    --soft: #F5F4F0;
+    --border: #E8E6E0;
+    --accent: #2D5A3D;
+    --accent-light: #EEF4F0;
+    --muted: #888880;
+    --danger: #C0392B;
+    --white: #ffffff;
+    --bg: #FAFAF8;
+    --card-bg: #ffffff;
+  }
+
+  /* ─── DARK MODE ─── */
+  body.dark {
+    --ink: #F0EEE8;
+    --soft: #1E2020;
+    --border: #2E3030;
+    --accent: #4CAF73;
+    --accent-light: #1A2E20;
+    --muted: #6B6B65;
+    --danger: #E05A4E;
+    --white: #161818;
+    --bg: #111313;
+    --card-bg: #191B1B;
+  }
+  body { background: var(--bg); color: var(--ink); transition: background 0.3s, color 0.3s; }
+  body.dark .card, body.dark .card-sm { background: var(--card-bg); }
+  body.dark .app-header { background: linear-gradient(135deg, #080f0a 0%, #0e1f14 40%, #071a0f 70%, #0b1810 100%) !important; }
+  body.dark .app-nav { background: var(--card-bg); }
+  body.dark .bottom-nav { background: var(--card-bg); }
+  body.dark .app-nav .nav-tab.active { border-bottom-color: #4CAF73; color: var(--ink); }
+  body.dark .input { background: var(--soft); color: var(--ink); border-color: var(--border); }
+  body.dark .input:focus { border-color: var(--ink); }
+  body.dark .btn-outline { background: var(--card-bg); color: var(--ink); border-color: var(--border); }
+  body.dark .btn-outline:hover { background: var(--soft); }
+  body.dark .btn-danger-ghost { background: var(--card-bg); }
+  body.dark .btn-ink { background: #F0EEE8; color: #111313; }
+  body.dark .btn-ink:hover:not(:disabled) { background: #ffffff; color: #111313; }
+  body.dark .auth-tab.active { background: #F0EEE8; color: #111313; }
+  body.dark .nav-tab.active { color: var(--ink); border-bottom-color: var(--ink); }
+  body.dark .bottom-nav-item.active { color: var(--ink); }
+  body.dark .bottom-nav-item.active .bottom-nav-icon { background: var(--soft); }
+  body.dark .auth-card { background: var(--card-bg); }
+  body.dark
+  body.dark .modal { background: var(--card-bg); }
+  body.dark #inv-preview-box { background: var(--card-bg); }
+  body.dark .stat { background: var(--card-bg); }
+  body.dark
+  body.dark .inv-row:hover:not(.hdr) { background: var(--soft); }
+  body.dark .inv-row.hdr { background: var(--soft); }
+  body.dark #screen-auth { background: #0a0c0c; }
+  body.dark .badge-pending { background: #3D2E00; color: #FBBF24; }
+  body.dark .badge-paid { background: var(--accent-light); color: var(--accent); }
+  body.dark .badge-overdue { background: #3D0A0A; color: #F87171; }
+
+  /* Theme toggle button */
+  .theme-toggle {
+    width: 36px; height: 36px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: 1px solid var(--border);
+    cursor: pointer; transition: all 0.2s; color: var(--muted);
+    flex-shrink: 0;
+  }
+  .theme-toggle:hover { background: var(--soft); color: var(--ink); }
+
+  /* ─── SCREENS ─── */
+  .screen { display: none; min-height: 100vh; }
+  .screen.active { display: block; }
+
+  /* ─── SETUP SCREEN ─── */
+
+  /* ─── AUTH SCREEN ─── */
+  #screen-auth {
+    background: var(--soft);
+    display: flex; align-items: center; justify-content: center;
+    padding: 2rem;
+  }
+  .auth-card {
+    background: #fff; border-radius: 20px;
+    box-shadow: 0 4px 40px rgba(0,0,0,0.08);
+    padding: 3rem 2.5rem; max-width: 420px; width: 100%;
+  }
+  .auth-tabs { display: flex; border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 2rem; }
+  .auth-tab {
+    flex: 1; text-align: center; padding: 0.55rem;
+    border-radius: 7px; font-size: 0.875rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s; color: var(--muted);
+    border: none; background: none;
+  }
+  .auth-tab.active { background: var(--ink); color: #fff; }
+  .auth-divider { text-align: center; color: var(--muted); font-size: 0.78rem; margin: 1rem 0; position: relative; }
+  .auth-divider::before, .auth-divider::after {
+    content: ''; position: absolute; top: 50%; width: 42%;
+    height: 1px; background: var(--border);
+  }
+  .auth-divider::before { left: 0; }
+  .auth-divider::after { right: 0; }
+
+  /* ─── APP LAYOUT ─── */
+  #screen-app { display: flex; flex-direction: column; min-height: 100vh; }
+
+  .app-header {
+    background: linear-gradient(135deg, #0f1f14 0%, #1a3325 40%, #0e2d1f 70%, #162b1f 100%);
+    padding: 0 2rem; height: 62px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+    border-bottom: none;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.06), 0 4px 24px rgba(0,0,0,0.18);
+    overflow: hidden;
+  }
+  .app-header::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 20% 50%, rgba(45,90,61,0.4) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 50%, rgba(76,175,115,0.12) 0%, transparent 55%);
+    pointer-events: none;
+  }
+  .app-header::after {
+    content: '';
+    position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(76,175,115,0.4), rgba(255,255,255,0.1), rgba(76,175,115,0.4), transparent);
+  }
+  .app-header .header-logo {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.55rem; letter-spacing: -0.02em;
+    color: #fff; position: relative; z-index: 1;
+  }
+  .app-header .header-logo span { color: #4CAF73; }
+  .app-header .header-actions { display: flex; align-items: center; gap: 0.65rem; position: relative; z-index: 1; }
+
+  /* Header buttons inherit light style since header is dark */
+  .app-header .btn-outline {
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.9);
+    border-color: rgba(255,255,255,0.18);
+  }
+  .app-header .btn-outline:hover {
+    background: rgba(255,255,255,0.15);
+    border-color: rgba(255,255,255,0.35);
+    color: #fff;
+  }
+  .app-header .btn-sm-ghost {
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.7);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 7px; padding: 0.4rem 0.6rem;
+    cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center;
+  }
+  .app-header .btn-sm-ghost:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .app-header .header-email-pill {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 20px; padding: 0.3rem 0.75rem;
+    font-size: 0.775rem; color: rgba(255,255,255,0.65);
+  }
+  .app-header .theme-toggle {
+    background: rgba(255,255,255,0.08);
+    border-color: rgba(255,255,255,0.18);
+    color: rgba(255,255,255,0.7);
+  }
+  .app-header .theme-toggle:hover {
+    background: rgba(255,255,255,0.15); color: #fff;
+  }
+
+  .app-nav {
+    background: #fff; border-bottom: 1px solid var(--border);
+    position: sticky; top: 62px; z-index: 99;
+  }
+  .nav-inner { max-width: 1100px; margin: 0 auto; padding: 0 2rem; display: flex; }
+  .nav-tab {
+    padding: 0.9rem 1.25rem; font-size: 0.875rem; font-weight: 500;
+    color: var(--muted); border-bottom: 2px solid transparent;
+    cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    background: none; border-top: none; border-left: none; border-right: none;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .nav-tab.active { color: var(--ink); border-bottom-color: #2D5A3D; }
+  .nav-tab:hover { color: var(--ink); }
+
+  /* ─── VIEWS ─── */
+  .view { display: none; }
+  .view.active { display: block; animation: fadeUp 0.35s ease; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ─── CARDS ─── */
+  .card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 2rem; }
+  .card-sm { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; }
+
+  /* ─── FORM ELEMENTS ─── */
+  .label {
+    display: block; font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 0.4rem;
+  }
+  .input {
+    width: 100%; border: 1px solid var(--border); border-radius: 9px;
+    padding: 0.65rem 0.9rem; font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem; background: #fff; color: var(--ink);
+    transition: border-color 0.2s; outline: none;
+  }
+  .input:focus { border-color: var(--ink); }
+  .input::placeholder { color: #ccc; }
+  textarea.input { resize: vertical; min-height: 72px; }
+  .input:disabled { background: var(--soft); color: var(--muted); }
+
+  /* ─── BUTTONS ─── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    padding: 0.68rem 1.4rem; border-radius: 9px; font-family: 'DM Sans', sans-serif;
+    font-weight: 600; font-size: 0.875rem; cursor: pointer;
+    transition: all 0.2s; border: none; white-space: nowrap;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-ink { background: var(--ink); color: #fff; }
+  .btn-ink:hover:not(:disabled) { background: #333; transform: translateY(-1px); }
+  .btn-outline { background: #fff; color: var(--ink); border: 1px solid var(--border); }
+  .btn-outline:hover:not(:disabled) { border-color: var(--ink); background: var(--soft); }
+  .btn-green { background: var(--accent); color: #fff; }
+  .btn-green:hover:not(:disabled) { background: #245031; }
+  .btn-danger-ghost { background: #fff; color: var(--danger); border: 1px solid #f0d0ce; }
+  .btn-danger-ghost:hover { background: #fdf0ef; }
+  .btn-sm { padding: 0.4rem 0.85rem; font-size: 0.8rem; border-radius: 7px; }
+  .btn-xs { padding: 0.3rem 0.65rem; font-size: 0.75rem; border-radius: 6px; }
+  .btn-block { width: 100%; justify-content: center; padding: 0.8rem; font-size: 0.95rem; }
+
+  /* ─── LOGO UPLOAD ─── */
+  .logo-drop {
+    border: 2px dashed var(--border); border-radius: 10px; padding: 1.5rem;
+    text-align: center; cursor: pointer; transition: all 0.2s;
+  }
+  .logo-drop:hover { border-color: var(--ink); background: var(--soft); }
+
+  /* ─── ITEMS TABLE ─── */
+  .item-grid { display: grid; grid-template-columns: 1fr 80px 110px 110px 34px; gap: 0.5rem; align-items: center; }
+
+  /* ─── STATUS BADGES ─── */
+  .badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.65rem; border-radius: 20px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+  .badge-pending { background: #FEF3C7; color: #92400E; }
+  .badge-paid    { background: var(--accent-light); color: var(--accent); }
+  .badge-overdue { background: #FEE2E2; color: #991B1B; }
+
+  /* ─── DASHBOARD LIST ─── */
+  .inv-row { display: grid; grid-template-columns: 90px 1fr 150px 110px 110px; gap: 1rem; align-items: center; padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border); font-size: 0.875rem; transition: background 0.15s; }
+  .inv-row:last-child { border-bottom: none; }
+  .inv-row.hdr { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); background: var(--soft); border-radius: 8px 8px 0 0; }
+  .inv-row:hover:not(.hdr) { background: var(--soft); cursor: pointer; }
+
+  /* ─── STAT CARDS ─── */
+  .stat { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 1.5rem 1.75rem; }
+  .stat-val { font-family: 'DM Serif Display', serif; font-size: 1.9rem; line-height: 1.1; }
+  .stat-lbl { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); margin-top: 0.35rem; }
+
+  /* ─── INVOICE PREVIEW ─── */
+  #inv-preview-box {
+    background: #fff; padding: 3rem; font-family: 'DM Sans', sans-serif;
+    max-width: 780px; margin: 0 auto;
+  }
+  #inv-preview-box table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; }
+  #inv-preview-box th { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); padding: 0.5rem 0.75rem; text-align: left; border-bottom: 2px solid var(--border); }
+  #inv-preview-box td { padding: 0.75rem; font-size: 0.875rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  #inv-preview-box tr:last-child td { border-bottom: none; }
+
+  /* ─── MODAL ─── */
+  .overlay { position: fixed; inset: 0; background: rgba(20,20,20,0.45); backdrop-filter: blur(6px); z-index: 300; display: none; align-items: center; justify-content: center; padding: 1.5rem; }
+  .overlay.open { display: flex; }
+  .modal { background: #fff; border-radius: 18px; max-width: 880px; width: 100%; max-height: 92vh; overflow-y: auto; position: relative; animation: fadeUp 0.3s ease; }
+
+  /* ─── LANGUAGE SELECTOR ─── */
+  .lang-selector { display: flex; gap: 0.35rem; align-items: center; }
+  .lang-btn {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0.35rem 0.65rem; border-radius: 7px; font-size: 0.78rem;
+    font-weight: 600; cursor: pointer; transition: all 0.2s;
+    border: 1.5px solid var(--border); background: #fff; color: var(--muted);
+    font-family: 'DM Sans', sans-serif;
+  }
+  .lang-btn:hover { border-color: var(--ink); color: var(--ink); background: var(--soft); }
+  .lang-btn.active { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+  body.dark .lang-btn { background: var(--card-bg); }
+  body.dark .lang-btn.active { background: var(--accent-light); }
+  .lang-divider { width: 1px; height: 20px; background: var(--border); margin: 0 0.15rem; }
+  .modal-body { padding: 2.5rem; }
+
+  /* ─── TOAST ─── */
+  #toast { position: fixed; bottom: 1.75rem; right: 1.75rem; background: var(--ink); color: #fff; padding: 0.75rem 1.35rem; border-radius: 10px; font-size: 0.875rem; font-weight: 500; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 999; max-width: 320px; }
+  #toast.show { opacity: 1; }
+
+  /* ─── LOADER ─── */
+  .spinner { width: 22px; height: 22px; border: 2.5px solid var(--border); border-top-color: var(--ink); border-radius: 50%; animation: spin 0.75s linear infinite; }
+  .spinner-sm { width: 14px; height: 14px; border-width: 2px; flex-shrink: 0; }
+  /* White spinner for dark buttons */
+  .btn-ink .spinner-sm { border-color: rgba(255,255,255,0.3); border-top-color: #fff; }
+  body.dark .btn-ink .spinner-sm { border-color: rgba(0,0,0,0.2); border-top-color: #111; }
+  .btn-green .spinner-sm { border-color: rgba(255,255,255,0.3); border-top-color: #fff; }
+  /* btn loading state */
+  .btn.loading { pointer-events: none; opacity: 0.8; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-center { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; gap: 1rem; color: var(--muted); font-size: 0.875rem; }
+
+  /* ─── UTILS ─── */
+  .main-wrap { max-width: 1100px; margin: 0 auto; padding: 2.5rem 2rem; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .form-group { margin-bottom: 0.85rem; }
+  .error-msg { color: var(--danger); font-size: 0.8rem; margin-top: 0.5rem; display: none; }
+  .error-msg.show { display: block; }
+
+  /* BOTTOM NAV */
+  .bottom-nav {
+    display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+    background: #fff; border-top: 1px solid var(--border);
+    padding: 0.5rem 0 calc(0.5rem + env(safe-area-inset-bottom));
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .bottom-nav-item {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0.2rem; padding: 0.5rem; cursor: pointer; transition: all 0.2s;
+    background: none; border: none; font-family: "DM Sans", sans-serif;
+    color: var(--muted); font-size: 0.62rem; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase;
+  }
+  .bottom-nav-item.active { color: var(--ink); }
+  .bottom-nav-icon {
+    width: 30px; height: 30px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; transition: background 0.2s;
+    margin-bottom: 0.1rem;
+  }
+  .bottom-nav-item.active .bottom-nav-icon { background: var(--soft); }
+  .fab {
+    display: none; position: fixed; bottom: 5rem; right: 1.25rem; z-index: 201;
+    background: var(--ink); color: #fff; width: 52px; height: 52px;
+    border-radius: 50%; border: none; font-size: 1.6rem; cursor: pointer;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    align-items: center; justify-content: center; transition: transform 0.15s;
+  }
+  .fab:active { transform: scale(0.92); }
+
+  @media (max-width: 700px) {
+    /* Core layout */
+    .grid-2 { grid-template-columns: 1fr; }
+    .main-wrap { padding: 1.25rem 1rem 7rem; }
+
+    /* Header compact */
+    .app-header { padding: 0 1rem; height: 50px; }
+    .header-hide-mobile { display: none !important; }
+
+    /* Replace top nav with bottom nav */
+    .app-nav { display: none; }
+    .bottom-nav { display: grid; }
+    .fab { display: flex; }
+
+    /* Cards */
+    .card { padding: 1.1rem; border-radius: 11px; }
+
+    /* Auth — bottom sheet style */
+    #screen-auth { padding: 0; align-items: flex-end; min-height: 100dvh; background: var(--ink); }
+    .auth-card { border-radius: 22px 22px 0 0; padding: 2rem 1.5rem 2.5rem; box-shadow: 0 -8px 40px rgba(0,0,0,0.2); max-width: 100%; }
+
+    /* Setup */
+
+    /* Stats 2x2 grid */
+    .stats-grid { grid-template-columns: 1fr 1fr !important; gap: 0.65rem !important; margin-bottom: 1.25rem !important; }
+    .stat { padding: 1rem; border-radius: 11px; }
+    .stat-val { font-size: 1.4rem; }
+    .stat-lbl { font-size: 0.65rem; }
+
+    /* Invoice list — simplified 2-col */
+    .inv-row { grid-template-columns: 1fr auto; gap: 0.4rem; padding: 0.85rem 1rem; }
+    .inv-row.hdr { display: none; }
+    .hide-sm { display: none !important; }
+
+    /* Items — stacked layout */
+    .item-grid { grid-template-columns: 1fr auto; gap: 0.4rem; }
+    .item-grid input:nth-child(1) { grid-column: 1 / -2; }
+    .item-grid input:nth-child(2),
+    .item-grid input:nth-child(3) { font-size: 0.8rem; }
+    .item-grid input:nth-child(4) { display: none; }
+    .item-grid-labels { display: none !important; }
+
+    /* Form actions stacked */
+    .form-actions-wrap { flex-direction: column !important; gap: 0.5rem !important; }
+    .form-actions-right { flex-direction: column !important; width: 100%; gap: 0.5rem !important; }
+    .form-actions-right .btn, .form-actions-wrap > .btn { width: 100%; justify-content: center; }
+
+    /* Dashboard top row */
+    .dash-top-row { flex-direction: column !important; align-items: flex-start !important; gap: 0.75rem !important; }
+    .dash-top-row select { width: 100% !important; }
+
+    /* Modal — bottom sheet */
+    .overlay { padding: 0; align-items: flex-end; }
+    .modal { border-radius: 20px 20px 0 0; max-height: 95dvh; width: 100%; animation: slideUp 0.3s ease; }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .modal-body { padding: 1.5rem 1.1rem 1.5rem; }
+    #inv-preview-box { padding: 1rem; font-size: 0.825rem; }
+    #inv-preview-box table th, #inv-preview-box table td { padding: 0.45rem 0.35rem; font-size: 0.75rem; }
+    .modal-footer { flex-wrap: wrap !important; gap: 0.5rem !important; }
+    .modal-footer .btn { flex: 1 1 auto; justify-content: center; min-width: 100px; }
+
+    /* Toast above bottom nav */
+    #toast { bottom: 5rem; left: 1rem; right: 1rem; max-width: none; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ████████████████ TOAST ████████████████ -->
+<div id="toast"></div>
+
+<!-- ████████████████ PREVIEW MODAL ████████████████ -->
+<div class="overlay" id="modal-preview">
+  <div class="modal">
+    <div class="modal-body">
+      <button onclick="closeModal('modal-preview')" style="position:absolute;top:1.25rem;right:1.25rem;background:none;border:none;cursor:pointer;font-size:1.4rem;color:var(--muted);line-height:1;">✕</button>
+      <div id="inv-preview-box"></div>
+      <div class="modal-footer" style="display:flex;gap:0.75rem;justify-content:space-between;align-items:center;margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border);flex-wrap:wrap;">
+        <!-- LEFT: status + language -->
+        <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
+          <select id="preview-status-sel" class="input" style="width:auto;font-size:0.825rem;" onchange="updateStatus()">
+            <option value="Pendente">Pendente</option>
+            <option value="Pago">Pago</option>
+            <option value="Atrasado">Atrasado</option>
+          </select>
+          <div class="lang-divider"></div>
+          <!-- Language selector -->
+          <div style="display:flex;flex-direction:column;gap:0.2rem;">
+            <div style="font-size:0.62rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--muted);margin-left:0.1rem;">Idioma do PDF</div>
+            <div class="lang-selector">
+              <button class="lang-btn active" data-lang="pt" onclick="setLang('pt')" title="Português">🇧🇷 PT</button>
+              <button class="lang-btn" data-lang="en" onclick="setLang('en')" title="English">🇺🇸 EN</button>
+              <button class="lang-btn" data-lang="es" onclick="setLang('es')" title="Español">🇪🇸 ES</button>
+              <button class="lang-btn" data-lang="fr" onclick="setLang('fr')" title="Français">🇫🇷 FR</button>
+            </div>
+          </div>
+        </div>
+        <!-- RIGHT: close + download -->
+        <div style="display:flex;gap:0.75rem;align-items:center;">
+          <button class="btn btn-outline" onclick="closeModal('modal-preview')">Fechar</button>
+          <button class="btn btn-green" onclick="downloadPDF()">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Baixar PDF
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ████████████████ SCREEN: AUTH ████████████████ -->
+<div class="screen" id="screen-auth" style="display:block;">
+  <div style="background:linear-gradient(135deg,#0f1f14 0%,#1a3325 40%,#0e2d1f 70%,#162b1f 100%);padding:1.1rem 2rem;box-shadow:0 2px 20px rgba(0,0,0,0.2);">
+    <div style="font-family:'DM Serif Display',serif;font-size:1.5rem;letter-spacing:-0.02em;color:#fff;">Faturar<span style="color:#4CAF73;">.</span></div>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 60px);padding:2rem;background:var(--soft);">
+    <div class="auth-card">
+      <h2 style="font-family:'DM Serif Display',serif;font-size:1.75rem;margin-bottom:0.35rem;">Bem-vindo</h2>
+      <p style="color:var(--muted);font-size:0.875rem;margin-bottom:1.75rem;">Acesse sua conta para gerenciar seus invoices</p>
+      <div id="auth-connecting" style="display:flex;align-items:center;gap:0.5rem;background:#FEF3C7;border-radius:8px;padding:0.6rem 0.9rem;margin-bottom:1rem;font-size:0.8rem;color:#92400E;">
+        <div class="spinner" style="width:14px;height:14px;border-width:2px;border-color:#f0d070;border-top-color:#92400E;"></div>
+        Conectando ao servidor...
+      </div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Entrar</button>
+        <button class="auth-tab" id="tab-signup" onclick="switchAuthTab('signup')">Criar Conta</button>
+      </div>
+
+      <!-- LOGIN -->
+      <div id="form-login">
+        <div class="form-group">
+          <label class="label">E-mail</label>
+          <input class="input" id="login-email" type="email" placeholder="seu@email.com" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <div class="form-group">
+          <label class="label">Senha</label>
+          <input class="input" id="login-pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <div class="error-msg" id="login-error"></div>
+        <button class="btn btn-ink btn-block" style="margin-top:0.5rem;" onclick="doLogin()" id="login-btn">Entrar</button>
+        <div style="text-align:center;margin-top:1rem;">
+          <button onclick="showReset()" style="background:none;border:none;cursor:pointer;font-size:0.8rem;color:var(--muted);text-decoration:underline;">Esqueci minha senha</button>
+        </div>
+      </div>
+
+      <!-- SIGNUP -->
+      <div id="form-signup" style="display:none;">
+        <div class="form-group">
+          <label class="label">Nome completo</label>
+          <input class="input" id="signup-name" type="text" placeholder="Seu nome">
+        </div>
+        <div class="form-group">
+          <label class="label">E-mail</label>
+          <input class="input" id="signup-email" type="email" placeholder="seu@email.com">
+        </div>
+        <div class="form-group">
+          <label class="label">Senha (mín. 6 caracteres)</label>
+          <input class="input" id="signup-pass" type="password" placeholder="••••••••">
+        </div>
+        <div class="form-group">
+          <label class="label">Confirmar Senha</label>
+          <input class="input" id="signup-pass2" type="password" placeholder="••••••••">
+        </div>
+        <div class="error-msg" id="signup-error"></div>
+        <button class="btn btn-ink btn-block" style="margin-top:0.5rem;" onclick="doSignup()" id="signup-btn">Criar Conta Grátis</button>
+      </div>
+
+      <!-- RESET -->
+      <div id="form-reset" style="display:none;">
+        <p style="font-size:0.875rem;color:var(--muted);margin-bottom:1rem;">Informe seu e-mail e enviaremos um link para redefinir sua senha.</p>
+        <div class="form-group">
+          <label class="label">E-mail</label>
+          <input class="input" id="reset-email" type="email" placeholder="seu@email.com">
+        </div>
+        <div class="error-msg" id="reset-error"></div>
+        <button class="btn btn-ink btn-block" onclick="doReset()" id="reset-btn">Enviar Link</button>
+        <div style="text-align:center;margin-top:0.75rem;">
+          <button onclick="switchAuthTab('login')" style="background:none;border:none;cursor:pointer;font-size:0.8rem;color:var(--muted);text-decoration:underline;">Voltar ao login</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ████████████████ SCREEN: APP ████████████████ -->
+<div class="screen" id="screen-app" style="display:none;">
+
+  <header class="app-header">
+    <!-- Logo -->
+    <div class="header-logo">Faturar<span>.</span></div>
+
+    <!-- Actions -->
+    <div class="header-actions">
+      <!-- Email pill (desktop) -->
+      <span id="header-email" class="header-email-pill header-hide-mobile"></span>
+
+      <!-- Nova Invoice (desktop) -->
+      <button class="btn btn-outline btn-sm header-hide-mobile" onclick="showView('criar')">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nova Invoice
+      </button>
+
+      <!-- Logout (desktop) -->
+      <button class="btn-sm-ghost header-hide-mobile" onclick="doLogout()" title="Sair">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+
+      <!-- Theme toggle (always visible) -->
+      <button class="theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()" title="Alternar tema" aria-label="Alternar entre tema claro e escuro">
+        <svg id="theme-icon-moon" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 109.79 9.79z"/></svg>
+        <svg id="theme-icon-sun" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:none;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+
+      <!-- Logout (mobile only) -->
+      <button class="btn-sm-ghost" id="mobile-logout-btn" style="display:none;" onclick="doLogout()" title="Sair" aria-label="Sair da conta">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <nav class="app-nav">
+    <div class="nav-inner">
+      <button class="nav-tab active" data-view="dashboard" onclick="showView('dashboard')">Dashboard</button>
+      <button class="nav-tab" data-view="criar" onclick="showView('criar')">Criar Invoice</button>
+      <button class="nav-tab" data-view="config" onclick="showView('config')">Meu Perfil</button>
+    </div>
+  </nav>
+
+  <!-- BOTTOM NAV (mobile) -->
+  <nav class="bottom-nav" id="bottom-nav">
+    <button class="bottom-nav-item active" data-view="dashboard" onclick="showView('dashboard')">
+      <div class="bottom-nav-icon">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      </div>
+      Dashboard
+    </button>
+    <button class="bottom-nav-item" data-view="criar" onclick="showView('criar')">
+      <div class="bottom-nav-icon">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+      </div>
+      Nova Invoice
+    </button>
+    <button class="bottom-nav-item" data-view="config" onclick="showView('config')">
+      <div class="bottom-nav-icon">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </div>
+      Perfil
+    </button>
+  </nav>
+
+  <div style="flex:1;">
+    <div class="main-wrap">
+
+      <!-- ══ DASHBOARD ══ -->
+      <div class="view active" id="view-dashboard">
+        <div class="dash-top-row" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;gap:1rem;">
+          <div>
+            <h2 class="serif" style="font-size:1.5rem;">Visão Geral</h2>
+            <p style="font-size:0.875rem;color:var(--muted);margin-top:0.2rem;">Acompanhe seus projetos e pagamentos</p>
+          </div>
+          <select class="input" style="width:auto;font-size:0.825rem;" id="filter-status" onchange="renderList()">
+            <option value="">Todos os status</option>
+            <option value="Pendente">Pendente</option>
+            <option value="Pago">Pago</option>
+            <option value="Atrasado">Atrasado</option>
+          </select>
+        </div>
+
+        <div class="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:2rem;">
+          <div class="stat"><div class="stat-val" id="stat-receber">R$ 0</div><div class="stat-lbl">Total a Receber</div></div>
+          <div class="stat"><div class="stat-val" id="stat-recebido">R$ 0</div><div class="stat-lbl">Total Recebido</div></div>
+          <div class="stat"><div class="stat-val" id="stat-pend">0</div><div class="stat-lbl">Pendentes</div></div>
+          <div class="stat"><div class="stat-val" id="stat-qtd">0</div><div class="stat-lbl">Total de Invoices</div></div>
+        </div>
+
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div style="padding:1.1rem 1.5rem;border-bottom:1px solid var(--border);font-weight:600;font-size:0.95rem;">Invoices Enviadas</div>
+          <div class="inv-row hdr">
+            <div>#</div><div>Cliente</div>
+            <div class="hide-sm">Serviço</div>
+            <div>Vencimento</div><div>Valor</div>
+          </div>
+          <div id="inv-list"></div>
+          <div id="inv-empty" style="text-align:center;padding:3rem;color:var(--muted);display:none;">
+            <div style="font-size:2.5rem;margin-bottom:0.6rem;">📄</div>
+            <div style="font-weight:600;margin-bottom:0.25rem;">Nenhuma invoice ainda</div>
+            <div style="font-size:0.875rem;">Crie sua primeira na aba <strong>Criar Invoice</strong></div>
+          </div>
+          <div id="inv-loading" class="loading-center">
+            <div class="spinner"></div>
+            <span>Carregando seus invoices...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ CRIAR ══ -->
+      <div class="view" id="view-criar">
+        <h2 class="serif" style="font-size:1.5rem;margin-bottom:0.25rem;">Nova Invoice</h2>
+        <p style="font-size:0.875rem;color:var(--muted);margin-bottom:2rem;">Preencha os dados abaixo para gerar seu invoice</p>
+
+        <form id="inv-form" onsubmit="salvarInvoice(event)">
+          <div class="grid-2">
+            <!-- PRESTADOR -->
+            <div class="card">
+              <div class="serif" style="font-size:1.1rem;margin-bottom:1.25rem;">Seus Dados</div>
+
+              <div class="form-group">
+                <label class="label">Logo da Empresa</label>
+                <div class="logo-drop" onclick="document.getElementById('logo-input').click()">
+                  <input type="file" id="logo-input" accept="image/*" onchange="handleLogo(event)" style="display:none">
+                  <div id="logo-placeholder">
+                    <div style="font-size:1.5rem;margin-bottom:0.25rem;">🖼️</div>
+                    <div style="font-size:0.825rem;color:var(--muted);">Clique para enviar seu logo</div>
+                    <div style="font-size:0.72rem;color:#bbb;margin-top:0.15rem;">PNG, JPG ou SVG</div>
+                  </div>
+                  <img id="logo-img" style="display:none;max-height:64px;max-width:180px;object-fit:contain;margin:0 auto;display:none;" alt="Logo">
+                </div>
+              </div>
+
+              <div class="form-group"><label class="label">Nome / Empresa *</label><input class="input" id="p-nome" placeholder="Studio Lucas Design" required></div>
+              <div class="form-group"><label class="label">CNPJ / CPF</label><input class="input" id="p-doc" placeholder="12.345.678/0001-90"></div>
+              <div class="form-group"><label class="label">E-mail</label><input class="input" id="p-email" type="email" placeholder="seu@email.com"></div>
+              <div class="form-group"><label class="label">Telefone / WhatsApp</label><input class="input" id="p-tel" placeholder="(11) 99999-9999"></div>
+              <div class="form-group"><label class="label">Cidade / Estado</label><input class="input" id="p-cidade" placeholder="São Paulo, SP"></div>
+              <div class="form-group"><label class="label">PIX / Chave de Pagamento</label><input class="input" id="p-pix" placeholder="CPF, e-mail ou chave aleatória"></div>
+            </div>
+
+            <!-- CLIENTE -->
+            <div class="card">
+              <div class="serif" style="font-size:1.1rem;margin-bottom:1.25rem;">Dados do Cliente</div>
+              <div class="form-group"><label class="label">Nome / Empresa *</label><input class="input" id="c-nome" placeholder="Restaurante Bella Vista" required></div>
+              <div class="form-group"><label class="label">CNPJ / CPF</label><input class="input" id="c-doc" placeholder="98.765.432/0001-10"></div>
+              <div class="form-group"><label class="label">E-mail</label><input class="input" id="c-email" type="email" placeholder="cliente@empresa.com.br"></div>
+              <div class="form-group"><label class="label">Telefone</label><input class="input" id="c-tel" placeholder="(11) 98888-7777"></div>
+              <div class="form-group"><label class="label">Endereço</label><textarea class="input" id="c-end" placeholder="Rua, número, bairro, cidade, estado"></textarea></div>
+            </div>
+          </div>
+
+          <!-- DETALHES -->
+          <div class="card" style="margin-top:1.5rem;">
+            <div class="serif" style="font-size:1.1rem;margin-bottom:1.25rem;">Detalhes do Invoice</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0.85rem;">
+              <div><label class="label">Número do Invoice</label><input class="input" id="inv-num" placeholder="INV-0001"></div>
+              <div><label class="label">Data de Emissão</label><input class="input" id="inv-data" type="date"></div>
+              <div><label class="label">Data de Vencimento</label><input class="input" id="inv-venc" type="date"></div>
+              <div><label class="label">Moeda</label>
+                <select class="input" id="inv-moeda" onchange="recalcTotals()">
+                  <option value="BRL">R$ — Real (BRL)</option>
+                  <option value="USD">$ — Dólar (USD)</option>
+                  <option value="EUR">€ — Euro (EUR)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- ITENS -->
+          <div class="card" style="margin-top:1.5rem;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
+              <div class="serif" style="font-size:1.1rem;">Serviços / Itens</div>
+              <button type="button" class="btn btn-outline btn-sm" onclick="addItem()">
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Adicionar Item
+              </button>
+            </div>
+
+            <div class="item-grid" style="padding:0 0.2rem 0.5rem;">
+              <div class="label" style="margin:0;">Descrição</div>
+              <div class="label" style="margin:0;">Qtd.</div>
+              <div class="label" style="margin:0;">Valor Unit.</div>
+              <div class="label" style="margin:0;">Total</div>
+              <div></div>
+            </div>
+            <div id="items-wrap"></div>
+
+            <!-- TOTALS -->
+            <div style="border-top:1px solid var(--border);margin-top:1rem;padding-top:1.25rem;display:flex;justify-content:flex-end;">
+              <div style="width:290px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:0.4rem;font-size:0.875rem;">
+                  <span style="color:var(--muted);">Subtotal</span><span id="sub-val">R$ 0,00</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;font-size:0.875rem;">
+                  <div style="display:flex;align-items:center;gap:0.4rem;color:var(--muted);">
+                    ISS
+                    <input type="number" id="tax-rate" value="5" min="0" max="30" step="0.5"
+                      class="input" style="width:52px;padding:0.2rem 0.35rem;font-size:0.8rem;text-align:center;" oninput="recalcTotals()">
+                    %
+                  </div>
+                  <span id="tax-val">R$ 0,00</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding-top:0.6rem;border-top:2px solid var(--ink);font-weight:700;font-size:1rem;">
+                  <span>Total</span><span id="tot-val">R$ 0,00</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- OBS -->
+          <div class="card" style="margin-top:1.5rem;">
+            <label class="label">Observações / Notas de Pagamento</label>
+            <textarea class="input" id="inv-obs" placeholder="Ex: Pagamento via PIX. Prazo: 15 dias úteis após aprovação." style="min-height:80px;"></textarea>
+          </div>
+
+          <!-- FORM ACTIONS -->
+          <div class="form-actions-wrap" style="display:flex;gap:0.75rem;justify-content:space-between;margin-top:1.5rem;flex-wrap:wrap;align-items:center;">
+            <!-- LEFT: Limpar -->
+            <button type="button" class="btn btn-danger-ghost" onclick="limparFormulario()">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+              Limpar Tudo
+            </button>
+            <!-- RIGHT: actions -->
+            <div class="form-actions-right" style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+              <button type="button" class="btn btn-outline" onclick="fillExample()">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+                Exemplo Rápido
+              </button>
+              <button type="button" class="btn btn-outline" onclick="openPreview()">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Pré-visualizar
+              </button>
+              <button type="submit" class="btn btn-ink" id="save-btn">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                Salvar & Gerar
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- ══ CONFIG ══ -->
+      <div class="view" id="view-config">
+        <h2 class="serif" style="font-size:1.5rem;margin-bottom:0.25rem;">Meu Perfil</h2>
+        <p style="font-size:0.875rem;color:var(--muted);margin-bottom:2rem;">Seus dados são preenchidos automaticamente em novas invoices</p>
+
+        <div class="card" style="max-width:760px;">
+          <div class="serif" style="font-size:1.1rem;margin-bottom:1.25rem;">Dados do Prestador</div>
+          <div class="grid-2">
+            <div class="form-group"><label class="label">Nome / Empresa</label><input class="input" id="cfg-nome" placeholder="Seu Studio"></div>
+            <div class="form-group"><label class="label">CNPJ / CPF</label><input class="input" id="cfg-doc" placeholder="00.000.000/0000-00"></div>
+            <div class="form-group"><label class="label">E-mail Profissional</label><input class="input" id="cfg-email" placeholder="contato@seudominio.com"></div>
+            <div class="form-group"><label class="label">Telefone / WhatsApp</label><input class="input" id="cfg-tel" placeholder="(11) 99999-9999"></div>
+            <div class="form-group"><label class="label">Cidade / Estado</label><input class="input" id="cfg-cidade" placeholder="São Paulo, SP"></div>
+            <div class="form-group"><label class="label">PIX</label><input class="input" id="cfg-pix" placeholder="CPF, e-mail ou chave"></div>
+            <div class="form-group"><label class="label">ISS Padrão (%)</label><input class="input" id="cfg-iss" type="number" value="5" min="0" max="30" step="0.5"></div>
+            <div class="form-group"><label class="label">Prefixo do Número</label><input class="input" id="cfg-prefix" value="INV" placeholder="INV"></div>
+          </div>
+          <div class="form-group"><label class="label">Observação Padrão</label><textarea class="input" id="cfg-obs" placeholder="Pagamento via PIX em até 7 dias úteis."></textarea></div>
+          <div style="display:flex;justify-content:flex-end;margin-top:0.5rem;">
+            <button class="btn btn-ink" onclick="saveConfig()" id="cfg-btn">Salvar Perfil</button>
+          </div>
+        </div>
+
+        </div>
+      </div>
+  </div>
+</div>
+
+<!-- ████████████████ SCRIPT ████████████████ -->
+<script>
+// ═══════════════════════════════════════════
+//  GLOBALS
+// ═══════════════════════════════════════════
+let sb = null;           // supabase client
+let currentUser = null;
+let invoices = [];       // local cache
+let userConfig = {};
+let logoDataURL = '';
+let itemCount = 0;
+let activePreviewId = null;
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+(function init() {
+  const url = 'https://vnlqspwonvlzncskhqgd.supabase.co';
+  const key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubHFzcHdvbnZsem5jc2tocWdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2MTY5NzksImV4cCI6MjA4NzE5Mjk3OX0.SGbST4fl24_igMDRtgkADQ_LXGq4KEVhhzk8Q6kqIZM';
+  bootSupabase(url, key);
+})();
+
+function bootSupabase(url, key) {
+  try {
+    sb = window.supabase.createClient(url, key);
+    sb.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        currentUser = session.user;
+        hideConnecting();
+        enterApp();
+      } else {
+        showScreen('auth');
+        hideConnecting();
+      }
+    }).catch(() => {
+      showScreen('auth');
+      hideConnecting();
+    });
+    sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        currentUser = session.user;
+        enterApp();
+      } else if (event === 'SIGNED_OUT') {
+        currentUser = null;
+        invoices = [];
+        showScreen('auth');
+      }
+    });
+  } catch(e) {
+    // Credentials are hardcoded — never go back to setup
+    console.error('Supabase init error:', e);
+    showScreen('auth');
+  }
+}
+
+// ═══════════════════════════════════════════
+//  SCREENS
+// ═══════════════════════════════════════════
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
+  const el = document.getElementById('screen-' + name);
+  if (!el) return;
+  el.style.display = (name === 'app') ? 'flex' : 'block';
+}
+
+// Show auth immediately while JS loads — prevents white screen
+document.getElementById('screen-auth').style.display = 'block';
+
+function hideConnecting() {
+  const el = document.getElementById('auth-connecting');
+  if (el) el.style.display = 'none';
+}
+
+function enterApp() {
+  showScreen('app');
+  document.getElementById('header-email').textContent = currentUser?.email || '';
+  // Show mobile logout btn on small screens
+  const mobileLogout = document.getElementById('mobile-logout-btn');
+  if (mobileLogout) mobileLogout.style.display = window.innerWidth <= 700 ? 'flex' : 'none';
+  window.addEventListener('resize', () => {
+    if (mobileLogout) mobileLogout.style.display = window.innerWidth <= 700 ? 'flex' : 'none';
+  });
+  loadConfig().then(() => {
+    initForm();
+    loadInvoices();
+  });
+}
+
+// ═══════════════════════════════════════════
+//  AUTH
+// ═══════════════════════════════════════════
+function switchAuthTab(tab) {
+  document.getElementById('form-login').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('form-signup').style.display = tab === 'signup' ? 'block' : 'none';
+  document.getElementById('form-reset').style.display = 'none';
+  document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+  document.getElementById('tab-signup').classList.toggle('active', tab === 'signup');
+}
+
+function showReset() {
+  document.getElementById('form-login').style.display = 'none';
+  document.getElementById('form-reset').style.display = 'block';
+}
+
+
+// ═══════════════════════════════════════════
+//  BUTTON LOADING HELPER
+// ═══════════════════════════════════════════
+function setBtnLoading(btn, loading, label, hasIcon) {
+  if (!btn) return;
+  if (loading) {
+    btn.disabled = true;
+    btn.classList.add('loading');
+    btn._originalHTML = btn.innerHTML;
+    btn.innerHTML = `<span class="spinner spinner-sm"></span> ${label}`;
+  } else {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    if (btn._originalHTML) btn.innerHTML = btn._originalHTML;
+    else btn.textContent = label;
+  }
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  errEl.classList.remove('show');
+  if (!sb) {
+    errEl.textContent = '⚠️ Conectando ao servidor... Aguarde um momento e tente novamente.';
+    errEl.classList.add('show');
+    // Retry connecting
+    const url = 'https://vnlqspwonvlzncskhqgd.supabase.co';
+    const key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubHFzcHdvbnZsem5jc2tocWdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2MTY5NzksImV4cCI6MjA4NzE5Mjk3OX0.SGbST4fl24_igMDRtgkADQ_LXGq4KEVhhzk8Q6kqIZM';
+    bootSupabase(url, key);
+    return;
+  }
+  if (!email || !pass) { errEl.textContent = '⚠️ Preencha e-mail e senha.'; errEl.classList.add('show'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = '⚠️ E-mail inválido.'; errEl.classList.add('show'); return; }
+  setBtnLoading(btn, true, 'Entrando...');
+  try {
+    const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if (error) {
+      const msgs = {
+        'Invalid login credentials': '❌ E-mail ou senha incorretos.',
+        'Email not confirmed': '📧 Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada.',
+        'Too many requests': '⏳ Muitas tentativas. Aguarde alguns minutos.',
+      };
+      errEl.textContent = msgs[error.message] || ('❌ ' + error.message);
+      errEl.classList.add('show');
+      setBtnLoading(btn, false, 'Entrar');
+    }
+  } catch(e) {
+    errEl.textContent = '❌ Erro de conexão. Verifique sua internet e tente novamente.';
+    errEl.classList.add('show');
+    setBtnLoading(btn, false, 'Entrar');
+  }
+}
+
+async function doSignup() {
+  const name  = document.getElementById('signup-name').value.trim();
+  const email = document.getElementById('signup-email').value.trim();
+  const pass  = document.getElementById('signup-pass').value;
+  const pass2 = document.getElementById('signup-pass2').value;
+  const errEl = document.getElementById('signup-error');
+  const btn   = document.getElementById('signup-btn');
+  errEl.classList.remove('show');
+  if (!name || !email || !pass) { errEl.textContent = '⚠️ Preencha todos os campos.'; errEl.classList.add('show'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = '⚠️ E-mail inválido.'; errEl.classList.add('show'); return; }
+  if (pass.length < 6) { errEl.textContent = '⚠️ Senha precisa ter pelo menos 6 caracteres.'; errEl.classList.add('show'); return; }
+  if (pass !== pass2) { errEl.textContent = '⚠️ As senhas não coincidem.'; errEl.classList.add('show'); return; }
+  if (!sb) {
+    errEl.textContent = '⚠️ Conectando ao servidor... Tente novamente em instantes.';
+    errEl.classList.add('show'); return;
+  }
+  setBtnLoading(btn, true, 'Criando conta...');
+  try {
+  const { error } = await sb.auth.signUp({ email, password: pass, options: { data: { full_name: name } } });
+  if (error) {
+    const msgs = {
+      'User already registered': '❌ Este e-mail já está cadastrado. Tente fazer login.',
+      'Password should be at least 6 characters': '⚠️ Senha muito curta. Use pelo menos 6 caracteres.',
+      'Unable to validate email address: invalid format': '⚠️ Formato de e-mail inválido.',
+      'Signup is disabled': '❌ Novos cadastros estão desativados no momento.',
+    };
+    errEl.textContent = msgs[error.message] || ('❌ ' + error.message);
+    errEl.classList.add('show');
+    setBtnLoading(btn, false, 'Criar Conta Grátis');
+  } else {
+    showToast('✅ Conta criada! Verifique seu e-mail para confirmar.');
+    btn.textContent = '✉️ Verifique seu e-mail';
+    btn.disabled = true;
+  }
+  } catch(e) {
+    errEl.textContent = '❌ Erro de conexão. Verifique sua internet e tente novamente.';
+    errEl.classList.add('show');
+    setBtnLoading(btn, false, 'Criar Conta Grátis');
+  }
+}
+
+async function doReset() {
+  const email = document.getElementById('reset-email').value.trim();
+  const errEl = document.getElementById('reset-error');
+  const btn   = document.getElementById('reset-btn');
+  errEl.classList.remove('show');
+  if (!email) { errEl.textContent = 'Informe seu e-mail.'; errEl.classList.add('show'); return; }
+  setBtnLoading(btn, true, 'Enviando...');
+  const { error } = await sb.auth.resetPasswordForEmail(email);
+  if (error) {
+    const msgs = { 'User not found': '❌ Nenhuma conta encontrada com este e-mail.' };
+    errEl.textContent = msgs[error.message] || ('❌ ' + error.message);
+    errEl.classList.add('show');
+    setBtnLoading(btn, false, 'Enviar Link');
+  } else { showToast('✅ Link enviado! Verifique seu e-mail.'); btn.textContent = '✉️ Link enviado!'; btn.disabled = true; }
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+  showToast('Até logo!');
+}
+
+// ═══════════════════════════════════════════
+//  APP VIEWS
+// ═══════════════════════════════════════════
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  // Sync both top nav and bottom nav
+  document.querySelectorAll('.bottom-nav-item').forEach(t => t.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  document.querySelectorAll(`[data-view="${name}"]`).forEach(el => el.classList.add('active'));
+  // Scroll to top on mobile
+  if (window.innerWidth <= 700) window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (name === 'dashboard') renderDashboard();
+  if (name === 'config') loadConfigUI();
+}
+
+// ═══════════════════════════════════════════
+//  SUPABASE DATA
+// ═══════════════════════════════════════════
+async function loadInvoices() {
+  document.getElementById('inv-loading').style.display = 'flex';
+  document.getElementById('inv-list').innerHTML = '';
+  document.getElementById('inv-empty').style.display = 'none';
+  const { data, error } = await sb.from('invoices').select('*').order('created_at', { ascending: false });
+  document.getElementById('inv-loading').style.display = 'none';
+  if (error) { showToast('❌ Erro ao carregar invoices.'); return; }
+  invoices = (data || []).map(r => ({ ...r.data, _id: r.id }));
+  renderDashboard();
+}
+
+async function saveInvoiceDB(inv) {
+  const payload = { user_id: currentUser.id, data: inv };
+  if (inv._id) {
+    const { error } = await sb.from('invoices').update({ data: inv }).eq('id', inv._id);
+    if (error) throw error;
+  } else {
+    const { data, error } = await sb.from('invoices').insert(payload).select().single();
+    if (error) throw error;
+    inv._id = data.id;
+  }
+  return inv;
+}
+
+async function loadConfig() {
+  const { data } = await sb.from('user_config').select('data').eq('user_id', currentUser.id).single();
+  if (data?.data) userConfig = data.data;
+  logoDataURL = userConfig.logo || '';
+}
+
+async function saveConfig() {
+  const btn = document.getElementById('cfg-btn');
+  setBtnLoading(btn, true, 'Salvando...');
+  userConfig = {
+    nome:   document.getElementById('cfg-nome').value,
+    doc:    document.getElementById('cfg-doc').value,
+    email:  document.getElementById('cfg-email').value,
+    tel:    document.getElementById('cfg-tel').value,
+    cidade: document.getElementById('cfg-cidade').value,
+    pix:    document.getElementById('cfg-pix').value,
+    iss:    document.getElementById('cfg-iss').value,
+    prefix: document.getElementById('cfg-prefix').value,
+    obs:    document.getElementById('cfg-obs').value,
+    logo:   logoDataURL
+  };
+  const { error } = await sb.from('user_config').upsert({ user_id: currentUser.id, data: userConfig });
+  setBtnLoading(btn, false, 'Salvar Perfil');
+  if (error) {
+    const msgs = { 'JWT expired': 'Sua sessão expirou. Faça login novamente.' };
+    showToast('❌ ' + (msgs[error.message] || error.message));
+  } else showToast('✅ Perfil salvo!');
+}
+
+function loadConfigUI() {
+  document.getElementById('cfg-nome').value   = userConfig.nome   || '';
+  document.getElementById('cfg-doc').value    = userConfig.doc    || '';
+  document.getElementById('cfg-email').value  = userConfig.email  || '';
+  document.getElementById('cfg-tel').value    = userConfig.tel    || '';
+  document.getElementById('cfg-cidade').value = userConfig.cidade || '';
+  document.getElementById('cfg-pix').value    = userConfig.pix    || '';
+  document.getElementById('cfg-iss').value    = userConfig.iss    || 5;
+  document.getElementById('cfg-prefix').value = userConfig.prefix || 'INV';
+  document.getElementById('cfg-obs').value    = userConfig.obs    || '';
+}
+
+// ═══════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════
+function fmt(n, m) {
+  const s = m === 'USD' ? '$' : m === 'EUR' ? '€' : 'R$';
+  return s + ' ' + Number(n||0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+function today() { return new Date().toISOString().split('T')[0]; }
+function addDays(d, n) { const dt = new Date(d||today()); dt.setDate(dt.getDate()+n); return dt.toISOString().split('T')[0]; }
+function fmtDate(s) { if(!s) return '—'; const [y,m,d] = s.split('-'); return `${d}/${m}/${y}`; }
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// ═══════════════════════════════════════════
+//  DASHBOARD
+// ═══════════════════════════════════════════
+function renderDashboard() {
+  const filter = document.getElementById('filter-status').value;
+  const filtered = filter ? invoices.filter(i => i.status === filter) : invoices;
+
+  const pending = invoices.filter(i => i.status !== 'Pago');
+  const paid    = invoices.filter(i => i.status === 'Pago');
+  document.getElementById('stat-receber').textContent  = fmt(pending.reduce((s,i)=>s+(i.total||0),0));
+  document.getElementById('stat-recebido').textContent = fmt(paid.reduce((s,i)=>s+(i.total||0),0));
+  document.getElementById('stat-pend').textContent = pending.length;
+  document.getElementById('stat-qtd').textContent  = invoices.length;
+
+  const el    = document.getElementById('inv-list');
+  const empty = document.getElementById('inv-empty');
+  document.getElementById('inv-loading').style.display = 'none';
+
+  if (filtered.length === 0) { el.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  el.innerHTML = filtered.map(inv => `
+    <div class="inv-row" onclick="openInvoiceView('${inv._id}')">
+      <div>
+        <div style="font-weight:700;font-size:0.8rem;">${inv.num}</div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:0.1rem;">${fmtDate(inv.venc)}</div>
+      </div>
+      <div>
+        <div style="font-weight:500;">${inv.cliente||''}</div>
+        <div style="font-size:0.78rem;color:var(--muted);">${inv.clienteEmail||''}</div>
+      </div>
+      <div class="hide-sm" style="font-size:0.82rem;color:var(--muted);">${inv.servico||''}</div>
+      <div class="hide-sm" style="font-size:0.82rem;">${fmtDate(inv.venc)}</div>
+      <div style="text-align:right;">
+        <div style="font-weight:700;font-size:0.875rem;">${fmt(inv.total, inv.moeda)}</div>
+        <div style="margin-top:0.25rem;"><span class="badge ${inv.status==='Pago'?'badge-paid':inv.status==='Atrasado'?'badge-overdue':'badge-pending'}">${inv.status||'Pendente'}</span></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ═══════════════════════════════════════════
+//  FORM INIT
+// ═══════════════════════════════════════════
+function initForm() {
+  itemCount = 0;
+  document.getElementById('items-wrap').innerHTML = '';
+  document.getElementById('inv-form').reset();
+
+  const prefix = userConfig.prefix || 'INV';
+  const num = prefix + '-' + String(invoices.length + 1).padStart(4, '0');
+  document.getElementById('inv-num').value   = num;
+  document.getElementById('inv-data').value  = today();
+  document.getElementById('inv-venc').value  = addDays(today(), 15);
+  document.getElementById('tax-rate').value  = userConfig.iss || 5;
+
+  if (userConfig.nome)   document.getElementById('p-nome').value   = userConfig.nome;
+  if (userConfig.doc)    document.getElementById('p-doc').value    = userConfig.doc;
+  if (userConfig.email)  document.getElementById('p-email').value  = userConfig.email;
+  if (userConfig.tel)    document.getElementById('p-tel').value    = userConfig.tel;
+  if (userConfig.cidade) document.getElementById('p-cidade').value = userConfig.cidade;
+  if (userConfig.pix)    document.getElementById('p-pix').value    = userConfig.pix;
+  if (userConfig.obs)    document.getElementById('inv-obs').value  = userConfig.obs;
+
+  if (logoDataURL) {
+    const img = document.getElementById('logo-img');
+    img.src = logoDataURL; img.style.display = 'block';
+    document.getElementById('logo-placeholder').style.display = 'none';
+  }
+
+  addItem('', 1, 0);
+  recalcTotals();
+}
+
+// ═══════════════════════════════════════════
+//  LOGO
+// ═══════════════════════════════════════════
+function handleLogo(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = r => {
+    logoDataURL = r.target.result;
+    const img = document.getElementById('logo-img');
+    img.src = logoDataURL; img.style.display = 'block';
+    document.getElementById('logo-placeholder').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+// ═══════════════════════════════════════════
+//  ITEMS
+// ═══════════════════════════════════════════
+function addItem(desc='', qtd=1, val=0) {
+  itemCount++;
+  const id = 'item-' + itemCount;
+  const div = document.createElement('div');
+  div.className = 'item-grid'; div.id = id;
+  div.style.cssText = 'margin-bottom:0.5rem;animation:fadeUp 0.25s ease;';
+  div.innerHTML = `
+    <input class="input" type="text" value="${desc}" placeholder="Ex: Design de Landing Page" oninput="recalcTotals()">
+    <input class="input" type="number" value="${qtd}" min="1" style="text-align:center;" oninput="calcRow('${id}')">
+    <input class="input" type="number" value="${val}" step="0.01" placeholder="0,00" oninput="calcRow('${id}')">
+    <input class="input" id="${id}-tot" type="text" value="${fmt(qtd*val,'BRL')}" readonly style="background:var(--soft);font-weight:600;">
+    <button type="button" class="btn btn-danger-ghost btn-xs" onclick="removeItem('${id}')">✕</button>
+  `;
+  document.getElementById('items-wrap').appendChild(div);
+  recalcTotals();
+}
+
+function removeItem(id) { document.getElementById(id).remove(); recalcTotals(); }
+
+function calcRow(id) {
+  const row = document.getElementById(id);
+  const nums = row.querySelectorAll('input[type=number]');
+  const q = parseFloat(nums[0].value)||0, v = parseFloat(nums[1].value)||0;
+  document.getElementById(id+'-tot').value = fmt(q*v, document.getElementById('inv-moeda').value);
+  recalcTotals();
+}
+
+function recalcTotals() {
+  let sub = 0;
+  document.querySelectorAll('#items-wrap .item-grid').forEach(row => {
+    const n = row.querySelectorAll('input[type=number]');
+    sub += (parseFloat(n[0]?.value)||0) * (parseFloat(n[1]?.value)||0);
+  });
+  const rate = parseFloat(document.getElementById('tax-rate').value)||0;
+  const tax = sub * rate / 100;
+  const m = document.getElementById('inv-moeda').value;
+  document.getElementById('sub-val').textContent = fmt(sub, m);
+  document.getElementById('tax-val').textContent = fmt(tax, m);
+  document.getElementById('tot-val').textContent = fmt(sub+tax, m);
+}
+
+// ═══════════════════════════════════════════
+//  QUICK EXAMPLE
+// ═══════════════════════════════════════════
+function fillExample() {
+  document.getElementById('p-nome').value   = 'Studio Lucas Design';
+  document.getElementById('p-doc').value    = '12.345.678/0001-90';
+  document.getElementById('p-email').value  = 'lucas@studiodesign.com.br';
+  document.getElementById('p-tel').value    = '(33) 99888-7766';
+  document.getElementById('p-cidade').value = 'Governador Valadares, MG';
+  document.getElementById('p-pix').value    = 'lucas@studiodesign.com.br';
+  document.getElementById('c-nome').value   = 'Clínica Estética Lumina';
+  document.getElementById('c-doc').value    = '98.765.432/0001-11';
+  document.getElementById('c-email').value  = 'contato@clinicalumina.com.br';
+  document.getElementById('c-tel').value    = '(33) 3322-1100';
+  document.getElementById('c-end').value    = 'Av. Dom Pedro II, 450 - Centro, Gov. Valadares, MG';
+  document.getElementById('items-wrap').innerHTML = ''; itemCount = 0;
+  addItem('Design da Landing Page (UX/UI)', 1, 3200);
+  addItem('Desenvolvimento Front-end (HTML/CSS/JS)', 1, 2000);
+  addItem('Integração WhatsApp Business', 1, 500);
+  addItem('SEO On-page + Otimização de velocidade', 1, 800);
+  document.getElementById('inv-obs').value = 'Pagamento via PIX. 50% no início e 50% na entrega. Prazo: 20 dias úteis.';
+  recalcTotals();
+  showToast('✅ Exemplo carregado!');
+}
+
+// ═══════════════════════════════════════════
+//  CLEAR FORM
+// ═══════════════════════════════════════════
+function limparFormulario() {
+  if (!confirm("Tem certeza que deseja apagar todos os dados do formulário?")) return;
+  ["p-nome","p-doc","p-email","p-tel","p-cidade","p-pix"].forEach(id => document.getElementById(id).value = "");
+  ["c-nome","c-doc","c-email","c-tel","c-end"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("inv-venc").value = addDays(today(), 15);
+  document.getElementById("inv-moeda").value = "BRL";
+  document.getElementById("inv-obs").value = "";
+  document.getElementById("tax-rate").value = userConfig.iss || 5;
+  const prefix = userConfig.prefix || "INV";
+  document.getElementById("inv-num").value = prefix + "-" + String(invoices.length + 1).padStart(4, "0");
+  logoDataURL = "";
+  const img = document.getElementById("logo-img");
+  img.src = ""; img.style.display = "none";
+  document.getElementById("logo-placeholder").style.display = "block";
+  document.getElementById("logo-input").value = "";
+  document.getElementById("items-wrap").innerHTML = "";
+  itemCount = 0;
+  addItem("", 1, 0);
+  recalcTotals();
+  showToast("Formulário limpo!");
+}
+
+// ═══════════════════════════════════════════
+//  GET FORM DATA
+// ═══════════════════════════════════════════
+function getFormData() {
+  const itens = [];
+  document.querySelectorAll('#items-wrap .item-grid').forEach(row => {
+    const txt = row.querySelectorAll('input[type=text]')[0]?.value || '';
+    const nums = row.querySelectorAll('input[type=number]');
+    const qtd = parseFloat(nums[0]?.value)||0, val = parseFloat(nums[1]?.value)||0;
+    if (txt) itens.push({ desc: txt, qtd, val });
+  });
+  const sub  = itens.reduce((s,i)=>s+i.qtd*i.val,0);
+  const rate = parseFloat(document.getElementById('tax-rate').value)||0;
+  const tax  = sub * rate / 100;
+  return {
+    num:           document.getElementById('inv-num').value,
+    prestadorNome: document.getElementById('p-nome').value,
+    prestadorDoc:  document.getElementById('p-doc').value,
+    prestadorEmail:document.getElementById('p-email').value,
+    prestadorTel:  document.getElementById('p-tel').value,
+    prestadorCidade:document.getElementById('p-cidade').value,
+    prestadorPix:  document.getElementById('p-pix').value,
+    cliente:       document.getElementById('c-nome').value,
+    clienteDoc:    document.getElementById('c-doc').value,
+    clienteEmail:  document.getElementById('c-email').value,
+    clienteTel:    document.getElementById('c-tel').value,
+    clienteEnd:    document.getElementById('c-end').value,
+    data:  document.getElementById('inv-data').value,
+    venc:  document.getElementById('inv-venc').value,
+    moeda: document.getElementById('inv-moeda').value,
+    itens, sub, taxRate: rate, tax, total: sub+tax,
+    servico: itens[0]?.desc || '',
+    obs: document.getElementById('inv-obs').value,
+    status: 'Pendente',
+    logo: logoDataURL
+  };
+}
+
+// ═══════════════════════════════════════════
+//  SAVE INVOICE
+// ═══════════════════════════════════════════
+async function salvarInvoice(e) {
+  e.preventDefault();
+  const btn = document.getElementById('save-btn');
+  setBtnLoading(btn, true, 'Salvando...');
+  try {
+    const inv = getFormData();
+    const saved = await saveInvoiceDB(inv);
+    const idx = invoices.findIndex(i => i._id === saved._id);
+    if (idx >= 0) invoices[idx] = saved; else invoices.unshift(saved);
+    showToast('✅ Invoice ' + saved.num + ' salva!');
+    activePreviewId = saved._id;
+    buildPreviewEl(saved);
+    document.getElementById('modal-preview').classList.add('open');
+    loadInvoices();
+  } catch(err) {
+    const invMsgs = {
+      'JWT expired': '❌ Sessão expirada. Faça login novamente.',
+      'new row violates row-level security policy': '❌ Erro de permissão. Tente sair e entrar novamente.',
+    };
+    showToast(invMsgs[err.message] || ('❌ Erro ao salvar: ' + err.message));
+  }
+  setBtnLoading(btn, false, 'Salvar & Gerar');
+}
+
+// ═══════════════════════════════════════════
+//  PREVIEW
+// ═══════════════════════════════════════════
+function openPreview() {
+  activePreviewId = null;
+  buildPreviewEl(getFormData());
+  document.getElementById('modal-preview').classList.add('open');
+}
+
+function openInvoiceView(id) {
+  const inv = invoices.find(i => i._id === id);
+  if (!inv) return;
+  activePreviewId = id;
+  document.getElementById('preview-status-sel').value = inv.status || 'Pendente';
+  buildPreviewEl(inv);
+  document.getElementById('modal-preview').classList.add('open');
+}
+
+function buildPreviewEl(inv) {
+  const m = inv.moeda || 'BRL';
+  const rows = (inv.itens||[]).map(it=>`
+    <tr>
+      <td>${it.desc}</td>
+      <td style="text-align:center;">${it.qtd}</td>
+      <td style="text-align:right;">${fmt(it.val,m)}</td>
+      <td style="text-align:right;font-weight:600;">${fmt(it.qtd*it.val,m)}</td>
+    </tr>`).join('');
+
+  const logoHTML = inv.logo
+    ? `<img src="${inv.logo}" style="max-height:58px;max-width:160px;object-fit:contain;" alt="Logo">`
+    : `<div style="width:48px;height:48px;background:var(--ink);border-radius:8px;display:flex;align-items:center;justify-content:center;"><span style="color:#fff;font-family:'DM Serif Display',serif;font-size:1.1rem;">${(inv.prestadorNome||'?')[0]}</span></div>`;
+
+  document.getElementById('inv-preview-box').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2.5rem;flex-wrap:wrap;gap:1rem;">
+      <div>
+        ${logoHTML}
+        <div style="font-family:'DM Serif Display',serif;font-size:1.1rem;margin-top:0.65rem;">${inv.prestadorNome||''}</div>
+        ${inv.prestadorDoc?`<div style="font-size:0.78rem;color:#888;">CNPJ/CPF: ${inv.prestadorDoc}</div>`:''}
+        ${inv.prestadorEmail?`<div style="font-size:0.78rem;color:#888;">${inv.prestadorEmail}</div>`:''}
+        ${inv.prestadorTel?`<div style="font-size:0.78rem;color:#888;">${inv.prestadorTel}</div>`:''}
+        ${inv.prestadorCidade?`<div style="font-size:0.78rem;color:#888;">${inv.prestadorCidade}</div>`:''}
+      </div>
+      <div style="text-align:right;">
+        <div style="font-family:'DM Serif Display',serif;font-size:2.25rem;letter-spacing:-0.03em;line-height:1;">INVOICE</div>
+        <div style="font-size:0.95rem;font-weight:700;color:var(--accent);margin-top:0.2rem;">${inv.num}</div>
+        <div style="font-size:0.78rem;color:#888;margin-top:0.5rem;">Emissão: <strong>${fmtDate(inv.data)}</strong></div>
+        <div style="font-size:0.78rem;color:#888;">Vencimento: <strong>${fmtDate(inv.venc)}</strong></div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:2rem;">
+      <div style="background:var(--soft);border-radius:10px;padding:1.1rem;">
+        <div style="font-size:0.68rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#888;margin-bottom:0.4rem;">Faturado Para</div>
+        <div style="font-weight:700;">${inv.cliente||''}</div>
+        ${inv.clienteDoc?`<div style="font-size:0.78rem;color:#888;">CNPJ/CPF: ${inv.clienteDoc}</div>`:''}
+        ${inv.clienteEmail?`<div style="font-size:0.78rem;color:#888;">${inv.clienteEmail}</div>`:''}
+        ${inv.clienteTel?`<div style="font-size:0.78rem;color:#888;">${inv.clienteTel}</div>`:''}
+        ${inv.clienteEnd?`<div style="font-size:0.78rem;color:#888;margin-top:0.2rem;">${inv.clienteEnd}</div>`:''}
+      </div>
+      <div style="background:var(--soft);border-radius:10px;padding:1.1rem;">
+        <div style="font-size:0.68rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#888;margin-bottom:0.4rem;">Pagamento</div>
+        ${inv.prestadorPix?`<div style="font-size:0.85rem;"><strong>PIX:</strong> ${inv.prestadorPix}</div>`:''}
+        <div style="font-size:0.85rem;margin-top:0.2rem;"><strong>Vencimento:</strong> ${fmtDate(inv.venc)}</div>
+        <div style="margin-top:0.65rem;">
+          <div style="font-size:0.68rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#888;">Total</div>
+          <div style="font-size:1.35rem;font-weight:700;color:var(--accent);font-family:'DM Serif Display',serif;">${fmt(inv.total,m)}</div>
+        </div>
+      </div>
+    </div>
+
+    <table>
+      <thead><tr><th style="width:48%;">Descrição</th><th style="text-align:center;">Qtd.</th><th style="text-align:right;">Valor Unit.</th><th style="text-align:right;">Total</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:1.25rem;">
+      <div style="width:255px;">
+        <div style="display:flex;justify-content:space-between;font-size:0.875rem;margin-bottom:0.3rem;"><span style="color:#888;">Subtotal</span><span>${fmt(inv.sub||inv.subtotal||0,m)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:0.875rem;margin-bottom:0.3rem;"><span style="color:#888;">ISS (${inv.taxRate||0}%)</span><span>${fmt(inv.tax||0,m)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:1rem;font-weight:700;padding-top:0.5rem;border-top:2px solid var(--ink);margin-top:0.25rem;"><span>Total</span><span>${fmt(inv.total||0,m)}</span></div>
+      </div>
+    </div>
+
+    ${inv.obs?`<div style="margin-top:1.75rem;padding:0.9rem 1.1rem;background:var(--soft);border-radius:8px;border-left:3px solid var(--accent);">
+      <div style="font-size:0.68rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#888;margin-bottom:0.3rem;">Observações</div>
+      <div style="font-size:0.825rem;color:#444;">${inv.obs}</div>
+    </div>`:''}
+
+    <div style="margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:0.72rem;color:#aaa;">
+      <span>Gerado com Faturar — ${inv.prestadorNome||''}</span>
+      <span>${inv.num}</span>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════
+//  UPDATE STATUS
+// ═══════════════════════════════════════════
+async function updateStatus() {
+  if (!activePreviewId) return;
+  const status = document.getElementById('preview-status-sel').value;
+  const inv = invoices.find(i => i._id === activePreviewId);
+  if (!inv) return;
+  inv.status = status;
+  const { error } = await sb.from('invoices').update({ data: inv }).eq('id', activePreviewId);
+  if (error) showToast('❌ Erro ao atualizar status.'); else { showToast('✅ Status: ' + status); renderDashboard(); }
+}
+
+
+// ═══════════════════════════════════════════
+//  PDF LANGUAGE SYSTEM
+// ═══════════════════════════════════════════
+let pdfLang = 'pt';
+
+const PDF_LANGS = {
+  pt: {
+    invoice:     'INVOICE',
+    billTo:      'FATURADO PARA',
+    payment:     'DADOS DE PAGAMENTO',
+    pix:         'PIX',
+    due:         'Vencimento',
+    totalDue:    'TOTAL A PAGAR',
+    issuedOn:    'Emissão',
+    dueOn:       'Vencimento',
+    description: 'DESCRIÇÃO',
+    qty:         'QTD',
+    unitPrice:   'VALOR UNIT.',
+    total:       'TOTAL',
+    subtotal:    'Subtotal',
+    tax:         'ISS',
+    grandTotal:  'Total',
+    notes:       'OBSERVAÇÕES',
+    footer:      'Gerado com Faturar',
+    cnpj:        'CNPJ/CPF',
+  },
+  en: {
+    invoice:     'INVOICE',
+    billTo:      'BILL TO',
+    payment:     'PAYMENT DETAILS',
+    pix:         'PIX / Bank Key',
+    due:         'Due Date',
+    totalDue:    'AMOUNT DUE',
+    issuedOn:    'Issue Date',
+    dueOn:       'Due Date',
+    description: 'DESCRIPTION',
+    qty:         'QTY',
+    unitPrice:   'UNIT PRICE',
+    total:       'TOTAL',
+    subtotal:    'Subtotal',
+    tax:         'Tax / ISS',
+    grandTotal:  'Grand Total',
+    notes:       'NOTES',
+    footer:      'Generated with Faturar',
+    cnpj:        'Tax ID',
+  },
+  es: {
+    invoice:     'FACTURA',
+    billTo:      'FACTURADO A',
+    payment:     'DATOS DE PAGO',
+    pix:         'PIX / Clave Bancaria',
+    due:         'Vencimiento',
+    totalDue:    'TOTAL A PAGAR',
+    issuedOn:    'Fecha Emisión',
+    dueOn:       'Vencimiento',
+    description: 'DESCRIPCIÓN',
+    qty:         'CANT.',
+    unitPrice:   'PRECIO UNIT.',
+    total:       'TOTAL',
+    subtotal:    'Subtotal',
+    tax:         'Impuesto / ISS',
+    grandTotal:  'Total',
+    notes:       'OBSERVACIONES',
+    footer:      'Generado con Faturar',
+    cnpj:        'NIF / CNPJ',
+  },
+  fr: {
+    invoice:     'FACTURE',
+    billTo:      'FACTURER À',
+    payment:     'DÉTAILS DE PAIEMENT',
+    pix:         'PIX / Clé Bancaire',
+    due:         'Échéance',
+    totalDue:    'MONTANT DÛ',
+    issuedOn:    'Date d'émission',
+    dueOn:       'Date d'échéance',
+    description: 'DESCRIPTION',
+    qty:         'QTÉ',
+    unitPrice:   'PRIX UNIT.',
+    total:       'TOTAL',
+    subtotal:    'Sous-total',
+    tax:         'Taxe / ISS',
+    grandTotal:  'Total',
+    notes:       'REMARQUES',
+    footer:      'Généré avec Faturar',
+    cnpj:        'N° Fiscal',
+  },
+};
+
+function setLang(lang) {
+  pdfLang = lang;
+  document.querySelectorAll('.lang-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.lang === lang);
+  });
+}
+
+// ═══════════════════════════════════════════
+//  PDF
+// ═══════════════════════════════════════════
+async function downloadPDF() {
+  const pdfBtn = document.querySelector('#modal-preview .btn-green');
+  const t = PDF_LANGS[pdfLang] || PDF_LANGS.pt;
+  setBtnLoading(pdfBtn, true, 'Gerando PDF...');
+  const inv = activePreviewId ? invoices.find(i => i._id === activePreviewId) : getFormData();
+  if (!inv) { setBtnLoading(pdfBtn, false, 'Baixar PDF'); return; }
+
+  try {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const m = inv.moeda || 'BRL';
+    const PW = 210, ML = 14, MR = 14, CW = PW - ML - MR;
+
+    // ── Helpers ──
+    const fmtV = (n, mo) => {
+      const s = mo === 'USD' ? '$' : mo === 'EUR' ? '€' : 'R$';
+      return s + ' ' + Number(n||0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    };
+    const fmtD = (s) => { if(!s) return '—'; const [y,mo,d] = s.split('-'); return `${d}/${mo}/${y}`; };
+    const setFont = (style, size, color) => {
+      pdf.setFont('helvetica', style);
+      pdf.setFontSize(size);
+      pdf.setTextColor(...(color || [26,26,26]));
+    };
+    const drawLine = (y, color) => {
+      pdf.setDrawColor(...(color || [232,230,224]));
+      pdf.line(ML, y, PW - MR, y);
+    };
+
+    let y = 18;
+
+    // ── Header bar ──
+    pdf.setFillColor(15, 31, 20);
+    pdf.rect(0, 0, PW, 14, 'F');
+    setFont('bold', 14, [255,255,255]);
+    pdf.text('Faturar.', ML, 9.5);
+    setFont('normal', 7.5, [76,175,115]);
+    pdf.text(t.invoice, PW - MR, 9.5, { align: 'right' });
+
+    y = 22;
+
+    // ── Logo ──
+    if (inv.logo) {
+      try {
+        const ext = inv.logo.includes('image/png') ? 'PNG' : 'JPEG';
+        pdf.addImage(inv.logo, ext, ML, y, 28, 14, undefined, 'FAST');
+      } catch(e) {}
+    }
+
+    // ── Prestador info (left) ──
+    const px = inv.logo ? ML + 32 : ML;
+    setFont('bold', 10, [26,26,26]);
+    pdf.text(inv.prestadorNome || '', px, y + 4);
+    setFont('normal', 8, [136,136,128]);
+    let lx = y + 9;
+    if (inv.prestadorDoc) { pdf.text(t.cnpj + ': ' + inv.prestadorDoc, px, lx); lx += 4.5; }
+    if (inv.prestadorEmail) { pdf.text(inv.prestadorEmail, px, lx); lx += 4.5; }
+    if (inv.prestadorTel) { pdf.text(inv.prestadorTel, px, lx); lx += 4.5; }
+    if (inv.prestadorCidade) { pdf.text(inv.prestadorCidade, px, lx); }
+
+    // ── Invoice number + dates (right) ──
+    setFont('bold', 18, [26,26,26]);
+    pdf.text(inv.num || '', PW - MR, y + 6, { align: 'right' });
+    setFont('normal', 8, [136,136,128]);
+    pdf.text(t.issuedOn + ': ' + fmtD(inv.data), PW - MR, y + 12, { align: 'right' });
+    pdf.text(t.dueOn + ': ' + fmtD(inv.venc), PW - MR, y + 17, { align: 'right' });
+
+    y = 48;
+    drawLine(y, [232,230,224]);
+    y += 6;
+
+    // ── Client + Payment boxes ──
+    const boxW = (CW - 5) / 2;
+    // Client box
+    pdf.setFillColor(245,244,240);
+    pdf.roundedRect(ML, y, boxW, 28, 2, 2, 'F');
+    setFont('bold', 6.5, [136,136,128]);
+    pdf.text(t.billTo, ML + 4, y + 5.5);
+    setFont('bold', 9, [26,26,26]);
+    pdf.text(inv.cliente || '', ML + 4, y + 11);
+    setFont('normal', 7.5, [100,100,95]);
+    let cy = y + 16;
+    if (inv.clienteDoc) { pdf.text(t.cnpj + ': ' + inv.clienteDoc, ML + 4, cy); cy += 4; }
+    if (inv.clienteEmail) { pdf.text(inv.clienteEmail, ML + 4, cy); cy += 4; }
+    if (inv.clienteTel) { pdf.text(inv.clienteTel, ML + 4, cy); }
+
+    // Payment box
+    const bx2 = ML + boxW + 5;
+    pdf.setFillColor(245,244,240);
+    pdf.roundedRect(bx2, y, boxW, 28, 2, 2, 'F');
+    setFont('bold', 6.5, [136,136,128]);
+    pdf.text(t.payment, bx2 + 4, y + 5.5);
+    setFont('normal', 8, [26,26,26]);
+    if (inv.prestadorPix) { pdf.text(t.pix + ': ' + inv.prestadorPix, bx2 + 4, y + 11); }
+    pdf.text(t.due + ': ' + fmtD(inv.venc), bx2 + 4, y + 16);
+    setFont('bold', 6.5, [136,136,128]);
+    pdf.text(t.totalDue, bx2 + 4, y + 22);
+    setFont('bold', 11, [45,90,61]);
+    pdf.text(fmtV(inv.total, m), bx2 + 4, y + 27.5);
+
+    y += 34;
+
+    // ── Items table header ──
+    pdf.setFillColor(26,26,26);
+    pdf.rect(ML, y, CW, 7, 'F');
+    setFont('bold', 7, [255,255,255]);
+    pdf.text(t.description, ML + 3, y + 4.8);
+    pdf.text(t.qty, ML + CW * 0.62, y + 4.8, { align: 'center' });
+    pdf.text(t.unitPrice, ML + CW * 0.78, y + 4.8, { align: 'center' });
+    pdf.text(t.total, ML + CW - 3, y + 4.8, { align: 'right' });
+    y += 7;
+
+    // ── Items rows ──
+    (inv.itens || []).forEach((it, i) => {
+      const rowH = 8;
+      if (i % 2 === 0) {
+        pdf.setFillColor(250,250,248);
+        pdf.rect(ML, y, CW, rowH, 'F');
+      }
+      setFont('normal', 8, [26,26,26]);
+      // Truncate long descriptions
+      const descLines = pdf.splitTextToSize(it.desc || '', CW * 0.55);
+      pdf.text(descLines[0], ML + 3, y + 5.2);
+      setFont('normal', 8, [100,100,95]);
+      pdf.text(String(it.qtd), ML + CW * 0.62, y + 5.2, { align: 'center' });
+      pdf.text(fmtV(it.val, m), ML + CW * 0.78, y + 5.2, { align: 'center' });
+      setFont('bold', 8, [26,26,26]);
+      pdf.text(fmtV(it.qtd * it.val, m), ML + CW - 3, y + 5.2, { align: 'right' });
+      drawLine(y + rowH, [232,230,224]);
+      y += rowH;
+    });
+
+    y += 5;
+
+    // ── Totals ──
+    const tblX = ML + CW * 0.6;
+    const tblW = CW * 0.4;
+    setFont('normal', 8, [136,136,128]);
+    pdf.text(t.subtotal, tblX, y);
+    setFont('normal', 8, [26,26,26]);
+    pdf.text(fmtV(inv.sub || inv.subtotal || 0, m), ML + CW - 3, y, { align: 'right' });
+    y += 6;
+    setFont('normal', 8, [136,136,128]);
+    pdf.text(`${t.tax} (${inv.taxRate || 0}%)`, tblX, y);
+    setFont('normal', 8, [26,26,26]);
+    pdf.text(fmtV(inv.tax || 0, m), ML + CW - 3, y, { align: 'right' });
+    y += 2;
+    drawLine(y, [26,26,26]);
+    y += 5;
+    setFont('bold', 10, [26,26,26]);
+    pdf.text(t.grandTotal, tblX, y);
+    setFont('bold', 10, [45,90,61]);
+    pdf.text(fmtV(inv.total || 0, m), ML + CW - 3, y, { align: 'right' });
+    y += 8;
+
+    // ── Notes ──
+    if (inv.obs) {
+      pdf.setFillColor(238,244,240);
+      const obsLines = pdf.splitTextToSize(inv.obs, CW - 12);
+      const obsH = obsLines.length * 4.5 + 10;
+      pdf.roundedRect(ML, y, CW, obsH, 2, 2, 'F');
+      pdf.setFillColor(45,90,61);
+      pdf.rect(ML, y, 2.5, obsH, 'F');
+      setFont('bold', 6.5, [136,136,128]);
+      pdf.text(t.notes, ML + 6, y + 5.5);
+      setFont('normal', 7.5, [68,68,68]);
+      pdf.text(obsLines, ML + 6, y + 10.5);
+      y += obsH + 6;
+    }
+
+    // ── Footer ──
+    drawLine(y + 3, [232,230,224]);
+    setFont('normal', 6.5, [170,170,170]);
+    pdf.text(t.footer + ' — ' + (inv.prestadorNome || ''), ML, y + 8);
+    pdf.text(inv.num || '', PW - MR, y + 8, { align: 'right' });
+
+    pdf.save(`${inv.num || 'invoice'}.pdf`);
+    showToast('✅ PDF vetorial baixado!');
+  } catch(err) {
+    console.error(err);
+    showToast('❌ Erro ao gerar PDF: ' + err.message);
+  } finally {
+    setBtnLoading(pdfBtn, false, 'Baixar PDF', true);
+  }
+}
+
+// Close modal on overlay click
+document.getElementById('modal-preview').addEventListener('click', function(e) {
+  if (e.target === this) closeModal('modal-preview');
+});
+// ═══════════════════════════════════════════
+//  THEME TOGGLE
+// ═══════════════════════════════════════════
+function applyTheme(dark) {
+  document.body.classList.toggle('dark', dark);
+  const moon = document.getElementById('theme-icon-moon');
+  const sun  = document.getElementById('theme-icon-sun');
+  if (moon) moon.style.display = dark ? 'none' : 'block';
+  if (sun)  sun.style.display  = dark ? 'block' : 'none';
+  localStorage.setItem('faturar_theme', dark ? 'dark' : 'light');
+}
+
+function toggleTheme() {
+  applyTheme(!document.body.classList.contains('dark'));
+}
+
+// Apply saved theme immediately
+(function() {
+  const saved = localStorage.getItem('faturar_theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  applyTheme(saved === 'dark' || (!saved && prefersDark));
+})();
+
+</script>
+</body>
+</html>
